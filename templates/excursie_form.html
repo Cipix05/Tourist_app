@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editeaza excursie' if excursie else 'Excursie noua' }}{% endblock %}
+{% block content %}
+  <div class="breadcrumb"><a href="{{ url_for('excursii_list') }}">Excursii</a> / {{ 'Editeaza' if excursie else 'Noua' }}</div>
+  <h1>{{ 'Editeaza excursie' if excursie else 'Excursie noua' }}</h1>
+
+  <form method="post" class="card">
+    <div class="form-grid">
+      <div class="field full">
+        <label for="nume">Denumire pachet *</label>
+        <input type="text" id="nume" name="nume" required value="{{ excursie.nume if excursie else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="cod">Cod excursie</label>
+        <input type="text" id="cod" name="cod" placeholder="ex: delta0824" value="{{ excursie.cod if excursie else '' }}">
+      </div>
+      <div class="field">
+        <label for="nr_zile">Numar zile</label>
+        <input type="number" id="nr_zile" name="nr_zile" min="1" value="{{ excursie.nr_zile if excursie else '' }}">
+      </div>
+      <div class="field">
+        <label for="pret">Pret / persoana (lei)</label>
+        <input type="number" step="0.01" id="pret" name="pret" value="{{ excursie.pret if excursie and excursie.pret else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="data_inceput">Data inceput</label>
+        <input type="date" id="data_inceput" name="data_inceput"
+               value="{{ excursie.data_inceput.isoformat() if excursie and excursie.data_inceput else '' }}">
+      </div>
+      <div class="field">
+        <label for="data_sfarsit">Data sfarsit</label>
+        <input type="date" id="data_sfarsit" name="data_sfarsit"
+               value="{{ excursie.data_sfarsit.isoformat() if excursie and excursie.data_sfarsit else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="cazare">Locatie cazare</label>
+        <input type="text" id="cazare" name="cazare" value="{{ excursie.cazare if excursie else '' }}">
+      </div>
+      <div class="field">
+        <label for="transport">Transport</label>
+        <input type="text" id="transport" name="transport" value="{{ excursie.transport if excursie else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="ghid">Ghid</label>
+        <input type="text" id="ghid" name="ghid" value="{{ excursie.ghid if excursie else '' }}">
+      </div>
+      <div class="field">
+        <label for="punct_contact">Punct de contact</label>
+        <input type="text" id="punct_contact" name="punct_contact" value="{{ excursie.punct_contact if excursie else '' }}">
+      </div>
+
+      <div class="field full">
+        <label for="obiective">Obiective</label>
+        <textarea id="obiective" name="obiective">{{ excursie.obiective if excursie else '' }}</textarea>
+      </div>
+      <div class="field full">
+        <label for="observatii">Observatii</label>
+        <textarea id="observatii" name="observatii">{{ excursie.observatii if excursie else '' }}</textarea>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;">
+      <button class="btn" type="submit">Salveaza</button>
+      <a class="btn secondary" href="{{ url_for('excursii_list') if not excursie else url_for('excursie_detaliu', excursie_id=excursie.id) }}">Renunta</a>
+    </div>
+  </form>
+{% endblock %}

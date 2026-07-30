@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editeaza turist' if turist else 'Turist nou' }}{% endblock %}
+{% block content %}
+  <div class="breadcrumb"><a href="{{ url_for('turisti_list') }}">Turisti</a> / {{ 'Editeaza' if turist else 'Nou' }}</div>
+  <h1>{{ 'Editeaza turist' if turist else 'Turist nou' }}</h1>
+
+  <form method="post" class="card" enctype="multipart/form-data">
+    <div class="form-grid">
+      <div class="field full">
+        <label for="nume">Nume complet *</label>
+        <input type="text" id="nume" name="nume" required value="{{ turist.nume if turist else '' }}">
+      </div>
+
+      <div class="field full">
+        <label>Poza carte de identitate</label>
+        {% if turist and turist.poza_ci %}
+          <div style="display:flex; align-items:center; gap:14px; margin-bottom:8px;">
+            {% if turist.poza_ci.lower().endswith('.pdf') %}
+              <a href="{{ url_for('fisier_incarcat', nume_fisier=turist.poza_ci) }}" target="_blank">Vezi fisierul PDF actual</a>
+            {% else %}
+              <a href="{{ url_for('fisier_incarcat', nume_fisier=turist.poza_ci) }}" target="_blank">
+                <img src="{{ url_for('fisier_incarcat', nume_fisier=turist.poza_ci) }}" alt="Poza CI" style="height:70px; border-radius:4px; border:1px solid var(--line);">
+              </a>
+            {% endif %}
+            <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-weight:400; font-size:13px;">
+              <input type="checkbox" name="elimina_poza" style="width:auto;"> elimina poza actuala
+            </label>
+          </div>
+        {% endif %}
+        <input type="file" name="poza_ci" accept=".png,.jpg,.jpeg,.webp,.pdf">
+        <p class="subtitle" style="margin:4px 0 0;">Accepta imagini (jpg/png/webp) sau PDF. Alege un fisier nou ca sa il inlocuiesti pe cel existent.</p>
+      </div>
+
+      <div class="field">
+        <label for="cnp">CNP</label>
+        <input type="text" id="cnp" name="cnp" maxlength="13" value="{{ turist.cnp if turist else '' }}">
+      </div>
+      <div class="field">
+        <label for="serie_ci">Serie si numar CI</label>
+        <input type="text" id="serie_ci" name="serie_ci" value="{{ turist.serie_ci if turist else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="emisa_de">CI emisa de</label>
+        <input type="text" id="emisa_de" name="emisa_de" value="{{ turist.emisa_de if turist else '' }}">
+      </div>
+      <div class="field">
+        <label for="data_nasterii">Data nasterii</label>
+        <input type="date" id="data_nasterii" name="data_nasterii"
+               value="{{ turist.data_nasterii.isoformat() if turist and turist.data_nasterii else '' }}">
+      </div>
+
+      <div class="field full">
+        <label for="adresa">Adresa</label>
+        <input type="text" id="adresa" name="adresa" value="{{ turist.adresa if turist else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="localitate">Localitate</label>
+        <input type="text" id="localitate" name="localitate" value="{{ turist.localitate if turist else '' }}">
+      </div>
+      <div class="field">
+        <label for="judet">Judet</label>
+        <input type="text" id="judet" name="judet" value="{{ turist.judet if turist else '' }}">
+      </div>
+
+      <div class="field">
+        <label for="telefon">Telefon</label>
+        <input type="tel" id="telefon" name="telefon" value="{{ turist.telefon if turist else '' }}">
+      </div>
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input type="text" id="email" name="email" value="{{ turist.email if turist else '' }}">
+      </div>
+
+      <div class="field full">
+        <label for="observatii">Observatii</label>
+        <textarea id="observatii" name="observatii">{{ turist.observatii if turist else '' }}</textarea>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;">
+      <button class="btn" type="submit">Salveaza</button>
+      <a class="btn secondary" href="{{ url_for('turisti_list') if not turist else url_for('turist_detaliu', turist_id=turist.id) }}">Renunta</a>
+    </div>
+  </form>
+{% endblock %}

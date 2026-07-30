@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Acasa - Evidenta Turisti{% endblock %}
+{% block content %}
+  <h1>Bine ai venit</h1>
+  <p class="subtitle">Evidenta turistilor, excursiilor si inscrierilor.</p>
+
+  <div class="stat-grid">
+    <div class="stat">
+      <div class="n">{{ nr_turisti }}</div>
+      <div class="l">Turisti inregistrati</div>
+    </div>
+    <div class="stat">
+      <div class="n">{{ nr_excursii }}</div>
+      <div class="l">Excursii inregistrate</div>
+    </div>
+  </div>
+
+  {% if turisti_premiu or zile_curand %}
+    <div class="card" id="curand" style="border-left:4px solid var(--warn);">
+      <h2 style="margin-top:0">🔔 Curand</h2>
+
+      {% if turisti_premiu %}
+        <table style="margin-bottom: {{ '18px' if zile_curand else '0' }};">
+          <tbody>
+            {% for t in turisti_premiu %}
+              <tr>
+                <td><span class="badge gold">🎁 cadou</span></td>
+                <td><a href="{{ url_for('turist_detaliu', turist_id=t.id) }}">{{ t.nume }}</a></td>
+                <td class="subtitle">urmeaza sa primeasca {{ t.premii_de_acordat }} excursie{{ 'i' if t.premii_de_acordat > 1 else '' }} cadou, la urmatoarea la care participa</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      {% if zile_curand %}
+        <table>
+          <tbody>
+            {% for z in zile_curand %}
+              <tr>
+                <td style="white-space:nowrap;">{{ z.data.strftime('%d.%m.%Y') }}</td>
+                <td><a href="{{ url_for('turist_detaliu', turist_id=z.turist.id) }}">{{ z.turist.nume }}</a></td>
+                <td class="subtitle">{{ z.tip }} - peste {{ z.zile_pana_la }} zile</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      {% if not extins %}
+        <p style="margin:14px 0 0;">
+          <a href="{{ url_for('index') }}?curand=extins#curand">Vezi tot ce urmeaza in urmatoarele 2 luni →</a>
+        </p>
+      {% else %}
+        <form method="get" action="{{ url_for('index') }}#curand" style="margin-top:14px; display:flex; gap:8px; align-items:center; max-width:320px;">
+          <input type="hidden" name="curand" value="extins">
+          <label style="margin:0; text-transform:none; font-weight:400; font-size:13px; white-space:nowrap;">Arata pe urmatoarele</label>
+          <select name="luni" onchange="this.form.submit()">
+            <option value="2" {% if luni == 2 %}selected{% endif %}>2 luni</option>
+            <option value="3" {% if luni == 3 %}selected{% endif %}>3 luni</option>
+            <option value="6" {% if luni == 6 %}selected{% endif %}>6 luni</option>
+            <option value="12" {% if luni == 12 %}selected{% endif %}>12 luni</option>
+          </select>
+        </form>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <div class="two-col">
+    <div class="card">
+      <h2 style="margin-top:0">Actiuni rapide</h2>
+      <p><a class="btn" href="{{ url_for('turist_nou') }}">+ Turist nou</a></p>
+      <p><a class="btn secondary" href="{{ url_for('excursie_noua') }}">+ Excursie noua</a></p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Ultimele excursii</h2>
+      {% if ultimele_excursii %}
+        <table>
+          {% for e in ultimele_excursii %}
+            <tr>
+              <td><a href="{{ url_for('excursie_detaliu', excursie_id=e.id) }}">{{ e.nume }}</a></td>
+              <td>{{ e.data_inceput.strftime('%d.%m.%Y') if e.data_inceput else '-' }}</td>
+              <td><span class="badge">{{ e.numar_participanti }} turisti</span></td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% else %}
+        <p class="subtitle">Nu exista inca excursii inregistrate.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Excursii{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Excursii</h1>
+      <p class="subtitle">{{ excursii|length }} excursii gasite</p>
+    </div>
+    <a class="btn" href="{{ url_for('excursie_noua') }}">+ Excursie noua</a>
+  </div>
+
+  <form class="search-bar" method="get" style="margin-bottom:18px; max-width:none; align-items:center;">
+    <input type="search" name="q" placeholder="Cauta dupa nume..." value="{{ q }}" style="max-width:260px;">
+
+    <select name="an" style="max-width:140px;" onchange="this.form.submit()">
+      <option value="">Toti anii</option>
+      {% for an in ani_disponibili %}
+        <option value="{{ an }}" {% if an_selectat == an|string %}selected{% endif %}>{{ an }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="ordine" style="max-width:170px;" onchange="this.form.submit()">
+      <option value="desc" {% if ordine == 'desc' %}selected{% endif %}>An descrescator</option>
+      <option value="asc" {% if ordine == 'asc' %}selected{% endif %}>An crescator</option>
+    </select>
+
+    <button class="btn secondary" type="submit">Cauta</button>
+  </form>
+
+  {% if excursii %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Excursie</th>
+            <th>Cod</th>
+            <th>Perioada</th>
+            <th>Zile</th>
+            <th>Pret</th>
+            <th>Participanti</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in excursii %}
+            <tr>
+              <td><a href="{{ url_for('excursie_detaliu', excursie_id=e.id) }}">{{ e.nume }}</a></td>
+              <td>{{ e.cod or '-' }}</td>
+              <td>
+                {{ e.data_inceput.strftime('%d.%m.%Y') if e.data_inceput else '-' }}
+                {% if e.data_sfarsit %} - {{ e.data_sfarsit.strftime('%d.%m.%Y') }}{% endif %}
+              </td>
+              <td>{{ e.nr_zile or '-' }}</td>
+              <td>{{ '%.0f lei'|format(e.pret) if e.pret else '-' }}</td>
+              <td><span class="badge">{{ e.numar_participanti }}</span></td>
+              <td><a class="btn small secondary" href="{{ url_for('excursie_detaliu', excursie_id=e.id) }}">Vezi</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty">Nicio excursie gasita. <a href="{{ url_for('excursie_noua') }}">Adauga prima excursie</a>.</div>
+  {% endif %}
+{% endblock %}

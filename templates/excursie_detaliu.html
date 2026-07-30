@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}{{ excursie.nume }}{% endblock %}
+{% block content %}
+  <div class="breadcrumb"><a href="{{ url_for('excursii_list') }}">Excursii</a> / {{ excursie.nume }}</div>
+  <div class="page-head">
+    <div>
+      <h1 style="margin-bottom:6px;">{{ excursie.nume }}</h1>
+      <span class="badge" style="font-size:14px; padding:4px 12px;">
+        {% if excursie.pret %}Pret: {{ '%.0f'|format(excursie.pret) }} lei / persoana{% else %}Pret neintrodus{% endif %}
+      </span>
+    </div>
+    <div>
+      <a class="btn secondary" href="{{ url_for('excursie_editeaza', excursie_id=excursie.id) }}">Editeaza</a>
+      <a class="btn secondary" href="{{ url_for('excursie_autocar_docx', excursie_id=excursie.id) }}">⬇ Lista autocar (Word)</a>
+      <form class="inline" method="post" action="{{ url_for('excursie_sterge', excursie_id=excursie.id) }}"
+            onsubmit="return confirm('Sigur stergi aceasta excursie si toate inscrierile ei?');">
+        <button class="btn danger" type="submit">Sterge</button>
+      </form>
+    </div>
+  </div>
+
+  {% if atentionari %}
+    <div class="card">
+      <h2 style="margin-top:0">🎂 Zile speciale in perioada excursiei</h2>
+      <table>
+        <thead><tr><th>Data</th><th>Turist</th><th>Ce este</th></tr></thead>
+        <tbody>
+          {% for a in atentionari %}
+            <tr>
+              <td style="white-space:nowrap;">{{ a.data.strftime('%d.%m.%Y') }}</td>
+              <td><a href="{{ url_for('turist_detaliu', turist_id=a.turist.id) }}">{{ a.turist.nume }}</a></td>
+              <td class="subtitle">{{ a.tip }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <h2 style="margin-top:0">Detalii</h2>
+        <dl class="kv">
+          <dt>Cod</dt><dd>{{ excursie.cod or '-' }}</dd>
+          <dt>Perioada</dt>
+          <dd>
+            {{ excursie.data_inceput.strftime('%d.%m.%Y') if excursie.data_inceput else '-' }}
+            {% if excursie.data_sfarsit %} - {{ excursie.data_sfarsit.strftime('%d.%m.%Y') }}{% endif %}
+            {% if excursie.nr_zile %} ({{ excursie.nr_zile }} zile){% endif %}
+          </dd>
+          <dt>Cazare</dt><dd>{{ excursie.cazare or '-' }}</dd>
+          <dt>Transport</dt><dd>{{ excursie.transport or '-' }}</dd>
+          <dt>Ghid</dt><dd>{{ excursie.ghid or '-' }}</dd>
+          <dt>Contact</dt><dd>{{ excursie.punct_contact or '-' }}</dd>
+        </dl>
+        {% if excursie.obiective %}<h2>Obiective</h2><p>{{ excursie.obiective }}</p>{% endif %}
+        {% if excursie.observatii %}<h2>Observatii</h2><p>{{ excursie.observatii }}</p>{% endif %}
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">Inscrie un turist</h2>
+        {% if turisti_disponibili %}
+          <form method="post" action="{{ url_for('inscriere_noua') }}">
+            <input type="hidden" name="excursie_id" value="{{ excursie.id }}">
+            <div class="form-grid">
+              <div class="field full">
+                <label for="turist_id">Turist</label>
+                <input list="lista-turisti" id="turist_nume" placeholder="Incepe sa scrii numele...">
+                <datalist id="lista-turisti">
+                  {% for t in turisti_disponibili %}
+                    <option data-id="{{ t.id }}" value="{{ t.nume }}"></option>
+                  {% endfor %}
+                </datalist>
+                <select id="turist_id" name="turist_id" required style="margin-top:6px;">
+                  <option value="">-- selecteaza turistul --</option>
+                  {% for t in turisti_disponibili %}
+                    <option value="{{ t.id }}">{{ t.nume }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field">
+                <label for="suma_achitata">Suma achitata (lei)</label>
+                <input type="number" step="0.01" id="suma_achitata" name="suma_achitata" value="0">
+              </div>
+              <div class="field">
+                <label for="discount">Discount (lei)</label>
+                <input type="number" step="0.01" id="discount" name="discount" value="0">
+              </div>
+              <div class="field">
+                <label for="penalizare">Penalizare (lei)</label>
+                <input type="number" step="0.01" id="penalizare" name="penalizare" value="0">
+              </div>
+              <div class="field">
+                <label><input type="checkbox" name="gratuitate" style="width:auto;display:inline-block;"> Gratuitate</label>
+              </div>
+              <div class="field full">
+                <label for="observatii">Observatii</label>
+                <input type="text" id="observatii" name="observatii">
+              </div>
+            </div>
+            <div style="margin-top:14px;">
+              <button class="btn" type="submit">Inscrie turistul</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="subtitle">Toti turistii inregistrati sunt deja inscrisi la aceasta excursie.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <div class="stat">
+        <div class="n">{{ excursie.numar_participanti }}</div>
+        <div class="l">Turisti inscrisi</div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">Lista turisti</h2>
+        {% if excursie.inscrieri %}
+          <table>
+            <thead><tr><th>Nume</th><th>Suma</th><th>Cadou</th><th></th></tr></thead>
+            <tbody>
+              {% for i in excursie.inscrieri %}
+                <tr>
+                  <td><a href="{{ url_for('turist_detaliu', turist_id=i.turist.id) }}">{{ i.turist.nume }}</a></td>
+                  <td>{{ '%.2f'|format(i.suma_achitata) }} lei{% if i.gratuitate %} <span class="badge">gratuit</span>{% endif %}</td>
+                  <td>
+                    <form class="inline" method="post" action="{{ url_for('inscriere_toggle_cadou', inscriere_id=i.id) }}"
+                          onsubmit="{% if i.excursie_cadou %}return confirm('Elimini bifa de excursie cadou pentru {{ i.turist.nume }}?\n\nNotificarea de premiu va ramane activa - o poti bifa la urmatoarea excursie la care participa.');{% endif %}">
+                      <button type="submit" class="patratel-cadou {{ 'negru' if i.excursie_cadou else 'alb' }}"
+                              title="{{ 'Excursie cadou - click pentru a elimina' if i.excursie_cadou else 'Nu e excursie cadou - click pentru a bifa' }}"></button>
+                    </form>
+                  </td>
+                  <td>
+                    <form class="inline" method="post" action="{{ url_for('inscriere_sterge', inscriere_id=i.id) }}"
+                          onsubmit="return confirm('Elimini acest turist din excursie?');">
+                      <button class="btn small danger" type="submit">Elimina</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="subtitle">Niciun turist inscris inca.</p>
+        {% endif %}
+      </div>
+
+      <div class="card" style="border-style:dashed;">
+        <h2 style="margin-top:0">📝 Extra (notite private)</h2>
+        <p class="subtitle" style="margin-top:-6px;">
+          Doar tu vezi asta - nu apare in export Word, nici la alta excursie.
+        </p>
+        <form method="post" action="{{ url_for('excursie_extra', excursie_id=excursie.id) }}">
+          <textarea name="notite_extra" rows="4" placeholder="Scrie aici orice vrei sa tii minte despre aceasta excursie...">{{ excursie.notite_extra or '' }}</textarea>
+          <div style="margin-top:10px;">
+            <button class="btn small" type="submit">Salveaza notitele</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <details class="card" id="costuri">
+    <summary style="cursor:pointer; font-weight:700; color:var(--brand-dark); font-size:16px;">
+      💰 Costuri {% if excursie.costuri %}<span class="badge">{{ excursie.costuri|length }}</span>{% endif %}
+    </summary>
+    <p class="subtitle">Aceasta sectiune nu apare in Word-ul exportat - e doar pentru evidenta interna.</p>
+
+    <h2>Hoteluri</h2>
+    <table style="margin-bottom:14px;">
+      <thead><tr><th>Nume</th><th>Pret</th><th>Unitate</th><th>Contact</th><th></th></tr></thead>
+      <tbody>
+        {% for c in excursie.costuri if c.tip == 'hotel' %}
+          <tr>
+            <td>{{ c.nume or '-' }}</td>
+            <td>{{ '%.0f lei'|format(c.pret) if c.pret else '-' }}</td>
+            <td>{{ c.unitate_pret or '-' }}</td>
+            <td style="white-space:pre-line;">{{ c.contact or '-' }}</td>
+            <td>
+              <form class="inline" method="post" action="{{ url_for('cost_sterge', cost_id=c.id) }}" onsubmit="return confirm('Stergi acest hotel din lista?');">
+                <button class="btn small danger" type="submit">Sterge</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="subtitle">Niciun hotel adaugat.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('cost_adauga', excursie_id=excursie.id) }}" class="form-grid" style="margin-bottom:24px;">
+      <input type="hidden" name="tip" value="hotel">
+      <div class="field"><label>Nume hotel</label><input type="text" name="nume"></div>
+      <div class="field"><label>Pret (lei)</label><input type="number" step="0.01" name="pret"></div>
+      <div class="field">
+        <label>Unitate pret</label>
+        <select name="unitate_pret">
+          <option value="camera/noapte">camera / noapte</option>
+          <option value="persoana/noapte">persoana / noapte</option>
+        </select>
+      </div>
+      <div class="field full"><label>Contact (telefon/email)</label><textarea name="contact" rows="2"></textarea></div>
+      <div class="field full"><button class="btn small" type="submit">+ Adauga hotel</button></div>
+    </form>
+
+    <h2>Obiective</h2>
+    <table style="margin-bottom:14px;">
+      <thead><tr><th>Nume</th><th>Pret</th><th>Notite</th><th></th></tr></thead>
+      <tbody>
+        {% for c in excursie.costuri if c.tip == 'obiectiv' %}
+          <tr>
+            <td>{{ c.nume or '-' }}</td>
+            <td>{{ '%.0f lei'|format(c.pret) if c.pret else '-' }}</td>
+            <td style="white-space:pre-line;">{{ c.notite or '-' }}</td>
+            <td>
+              <form class="inline" method="post" action="{{ url_for('cost_sterge', cost_id=c.id) }}" onsubmit="return confirm('Stergi acest obiectiv din lista?');">
+                <button class="btn small danger" type="submit">Sterge</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="subtitle">Niciun obiectiv adaugat.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('cost_adauga', excursie_id=excursie.id) }}" class="form-grid" style="margin-bottom:24px;">
+      <input type="hidden" name="tip" value="obiectiv">
+      <div class="field"><label>Nume obiectiv</label><input type="text" name="nume"></div>
+      <div class="field"><label>Pret (lei)</label><input type="number" step="0.01" name="pret"></div>
+      <div class="field full"><label>Notite</label><textarea name="notite" rows="2"></textarea></div>
+      <div class="field full"><button class="btn small" type="submit">+ Adauga obiectiv</button></div>
+    </form>
+
+    <h2>Extra</h2>
+    <table style="margin-bottom:14px;">
+      <thead><tr><th>Denumire</th><th>Pret</th><th>Notite</th><th></th></tr></thead>
+      <tbody>
+        {% for c in excursie.costuri if c.tip == 'extra' %}
+          <tr>
+            <td>{{ c.nume or '-' }}</td>
+            <td>{{ '%.0f lei'|format(c.pret) if c.pret else '-' }}</td>
+            <td style="white-space:pre-line;">{{ c.notite or '-' }}</td>
+            <td>
+              <form class="inline" method="post" action="{{ url_for('cost_sterge', cost_id=c.id) }}" onsubmit="return confirm('Stergi acest cost din lista?');">
+                <button class="btn small danger" type="submit">Sterge</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="4" class="subtitle">Niciun cost extra adaugat.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('cost_adauga', excursie_id=excursie.id) }}" class="form-grid" style="margin-bottom:8px;">
+      <input type="hidden" name="tip" value="extra">
+      <div class="field"><label>Denumire</label><input type="text" name="nume"></div>
+      <div class="field"><label>Pret (lei)</label><input type="number" step="0.01" name="pret"></div>
+      <div class="field full"><label>Notite</label><textarea name="notite" rows="2"></textarea></div>
+      <div class="field full"><button class="btn small" type="submit">+ Adauga extra</button></div>
+    </form>
+
+    <h2 style="margin-top:30px;">Achitatii</h2>
+    <p class="subtitle" style="margin-top:-6px;">
+      Turistii cu excursie cadou nu apar aici (nu au nimic de platit).
+      {% if not excursie.pret %}Introdu pretul excursiei (buton "Editeaza") ca sa se marcheze automat cine a achitat integral.{% endif %}
+    </p>
+    {% if inscrieri_de_achitat %}
+      <table>
+        <thead><tr><th>Turist</th><th>Suma achitata</th><th></th></tr></thead>
+        <tbody>
+          {% for i in inscrieri_de_achitat %}
+            <tr {% if i.este_achitat %}style="background:#e7f5ea;"{% endif %}>
+              <td style="{% if i.este_achitat %}color:var(--good); font-weight:600;{% endif %}">{{ i.turist.nume }}</td>
+              <td colspan="2">
+                {% if i.este_achitat %}
+                  <span style="color:var(--good); font-weight:600;">Achitat</span>
+                {% else %}
+                  <form class="inline" method="post" action="{{ url_for('inscriere_plata', inscriere_id=i.id) }}" style="display:flex; gap:8px; align-items:center;">
+                    <input type="number" step="0.01" name="suma_achitata" value="{{ i.suma_achitata or 0 }}" style="width:110px;">
+                    <button class="btn small secondary" type="submit">Salveaza suma</button>
+                    <button class="btn small" type="submit" name="marcheaza_achitat" value="1">Marcheaza achitat</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="subtitle">Niciun turist de achitat (fie nu e nimeni inscris, fie toti au excursie cadou).</p>
+    {% endif %}
+  </details>
+
+  <script>
+    // sincronizeaza campul de tip "scrie si cauta" (datalist) cu select-ul real
+    const input = document.getElementById('turist_nume');
+    const select = document.getElementById('turist_id');
+    if (input) {
+      input.addEventListener('input', () => {
+        const opts = document.getElementById('lista-turisti').options;
+        for (const opt of opts) {
+          if (opt.value === input.value) {
+            select.value = opt.dataset.id;
+            return;
+          }
+        }
+      });
+      select.addEventListener('change', () => {
+        input.value = select.options[select.selectedIndex].text;
+      });
+    }
+  </script>
+{% endblock %}

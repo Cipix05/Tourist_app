@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Turisti{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Turisti</h1>
+      <p class="subtitle">{{ turisti|length }} turisti gasiti</p>
+    </div>
+    <a class="btn" href="{{ url_for('turist_nou') }}">+ Turist nou</a>
+  </div>
+
+  <form class="search-bar" method="get" style="margin-bottom:18px;">
+    <input type="search" name="q" placeholder="Cauta dupa nume..." value="{{ q }}">
+    <button class="btn secondary" type="submit">Cauta</button>
+  </form>
+
+  {% if turisti %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nume</th>
+            <th>Localitate</th>
+            <th>Telefon</th>
+            <th>Excursii</th>
+            <th>Excursii cadou</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in turisti %}
+            <tr>
+              <td><a href="{{ url_for('turist_detaliu', turist_id=t.id) }}">{{ t.nume }}</a></td>
+              <td>{{ t.localitate or '-' }}</td>
+              <td>{{ t.telefon or '-' }}</td>
+              <td>{{ t.numar_excursii }}</td>
+              <td>{% if t.numar_premii %}<span class="badge gold">{{ t.numar_premii }}</span>{% else %}-{% endif %}</td>
+           <td>
+                {% if t.premii_de_acordat > 0 %}
+                  <span class="badge gold">{{ t.premii_de_acordat }} de acordat</span>
+                {% elif t.numar_cadouri_acordate > 0 %}
+                  {{ t.numar_cadouri_acordate }} primite
+                {% else %}-{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty">Niciun turist gasit. <a href="{{ url_for('turist_nou') }}">Adauga primul turist</a>.</div>
+  {% endif %}
+{% endblock %}

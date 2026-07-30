@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ turist.nume }}{% endblock %}
+{% block content %}
+  <div class="breadcrumb"><a href="{{ url_for('turisti_list') }}">Turisti</a> / {{ turist.nume }}</div>
+  <div class="page-head">
+    <h1>{{ turist.nume }}</h1>
+    <div>
+      <a class="btn secondary" href="{{ url_for('turist_editeaza', turist_id=turist.id) }}">Editeaza</a>
+      <form class="inline" method="post" action="{{ url_for('turist_sterge', turist_id=turist.id) }}"
+            onsubmit="return confirm('Sigur stergi acest turist si toate inscrierile lui?');">
+        <button class="btn danger" type="submit">Sterge</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <h2 style="margin-top:0">Date personale</h2>
+        <dl class="kv">
+          <dt>CNP</dt><dd>{{ turist.cnp or '-' }}</dd>
+          <dt>CI</dt><dd>{{ turist.serie_ci or '-' }}{% if turist.emisa_de %} / {{ turist.emisa_de }}{% endif %}</dd>
+          <dt>Data nasterii</dt><dd>{{ turist.data_nasterii.strftime('%d.%m.%Y') if turist.data_nasterii else '-' }}{% if turist.varsta %} ({{ turist.varsta }} ani){% endif %}</dd>
+          <dt>Adresa</dt><dd>{{ turist.adresa or '-' }}</dd>
+          <dt>Localitate</dt><dd>{{ turist.localitate or '-' }}{% if turist.judet %}, {{ turist.judet }}{% endif %}</dd>
+          <dt>Telefon</dt><dd>{{ turist.telefon or '-' }}</dd>
+          <dt>E-mail</dt><dd>{{ turist.email or '-' }}</dd>
+        </dl>
+
+        {% if onomastica_text %}
+          <h2>Onomastica</h2>
+          <p>{{ onomastica_text }}</p>
+        {% endif %}
+
+        {% if turist.poza_ci %}
+          <h2>Poza CI</h2>
+          {% if turist.poza_ci.lower().endswith('.pdf') %}
+            <a class="btn small secondary" href="{{ url_for('fisier_incarcat', nume_fisier=turist.poza_ci) }}" target="_blank">Deschide fisierul PDF</a>
+          {% else %}
+            <a href="{{ url_for('fisier_incarcat', nume_fisier=turist.poza_ci) }}" target="_blank">
+              <img src="{{ url_for('fisier_incarcat', nume_fisier=turist.poza_ci) }}" alt="Poza CI" style="max-height:180px; border-radius:6px; border:1px solid var(--line);">
+            </a>
+          {% endif %}
+        {% endif %}
+
+        {% if turist.observatii %}
+          <h2>Observatii</h2>
+          <p>{{ turist.observatii }}</p>
+        {% endif %}
+        {% if turist.istoric_modificari %}
+          <h2>Istoric modificari</h2>
+          <div class="history">{{ turist.istoric_modificari }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+
+      <div class="stat-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="stat">
+          <div class="n">{{ turist.numar_excursii }}</div>
+          <div class="l">Excursii efectuate</div>
+        </div>
+        <div class="stat">
+          <div class="n">{{ turist.numar_cadouri_acordate }}</div>
+          <div class="l">🎁 Excursii cadou primite</div>
+        </div>
+      </div>
+
+
+
+      {% if turist.premii_de_acordat > 0 %}
+        <div class="flash warning">
+          🎁 Are {{ turist.premii_de_acordat }} excursie{{ 'i' if turist.premii_de_acordat > 1 else '' }} cadou de primit -
+          se bifeaza direct pe randul lui, la urmatoarea excursie la care participa (sectiunea "Excursie cadou").
+        </div>
+      {% endif %}
+
+      <div class="card">
+        <h2 style="margin-top:0">Excursii</h2>
+        {% if turist.inscrieri %}
+          <table>
+            <thead><tr><th>Excursie</th><th>Data</th><th>Suma</th><th></th></tr></thead>
+            <tbody>
+              {% for i in turist.inscrieri %}
+                <tr>
+                  <td><a href="{{ url_for('excursie_detaliu', excursie_id=i.excursie.id) }}">{{ i.excursie.nume }}</a></td>
+                  <td>{{ i.excursie.data_inceput.strftime('%d.%m.%Y') if i.excursie.data_inceput else '-' }}</td>
+                  <td>{{ '%.2f'|format(i.suma_achitata) }} lei</td>
+                  <td>{% if i.excursie_cadou %}<span class="badge gold">🎁 cadou</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="subtitle">Nicio excursie inregistrata inca.</p>
+        {% endif %}
+      </div>
+
+      <div class="card" style="border-style:dashed;">
+        <h2 style="margin-top:0">📝 Extra (notite private)</h2>
+        <p class="subtitle" style="margin-top:-6px;">
+          Doar tu vezi asta - nu apare in export Word, nici la alt turist.
+        </p>
+        <form method="post" action="{{ url_for('turist_extra', turist_id=turist.id) }}">
+          <textarea name="notite_extra" rows="4" placeholder="Scrie aici orice vrei sa tii minte despre acest turist...">{{ turist.notite_extra or '' }}</textarea>
+          <div style="margin-top:10px;">
+            <button class="btn small" type="submit">Salveaza notitele</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}
