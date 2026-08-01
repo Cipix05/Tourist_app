@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Import date - Evidenta Turisti{% endblock %}
+{% block content %}
+  <h1>Import date din fisiere</h1>
+  <p class="subtitle">
+    Adu turistii, excursiile si inscrierile direct din fisiere Excel sau Word,
+    fara sa mai folosesti terminalul. Poti alege mai multe fisiere deodata.
+  </p>
+
+  <div class="card">
+    <form method="post" enctype="multipart/form-data" data-testid="import-form">
+      <div class="field">
+        <label for="fisiere">Alege fisiere (.xls, .xlsx, .doc, .docx)</label>
+        <input type="file" id="fisiere" name="fisiere" multiple
+               accept=".xls,.xlsx,.doc,.docx" required data-testid="import-file-input">
+      </div>
+      <p class="subtitle" style="margin-top:8px;">
+        Datele duplicate nu se dubleaza: daca un turist exista deja (dupa CNP sau nume),
+        informatia lipsa se completeaza fara a crea o inregistrare noua.
+        Fisierele .doc vechi se convertesc automat doar daca ai Word sau LibreOffice instalat.
+      </p>
+      <div style="margin-top:14px;">
+        <button class="btn" type="submit" data-testid="import-submit-btn">Importa</button>
+        <a class="btn secondary" href="{{ url_for('index') }}">Renunta</a>
+      </div>
+    </form>
+  </div>
+
+  {% if raport %}
+    <div class="card">
+      <h2 style="margin-top:0">Raport import</h2>
+      <div class="history" data-testid="import-report">{{ raport }}</div>
+    </div>
+  {% endif %}
+{% endblock %}
