@@ -159,6 +159,8 @@ python import_excel.py fisier1.xls fisier2.docx fisier3.xlsx
 ## Daca ceva nu merge
 
 - **"python nu este recunoscut ca o comanda"** - Python nu e instalat
+
+Cipi a fost aici
   corect sau nu a fost adaugat la PATH; reinstaleaza-l si bifeaza
   optiunea de la Pasul 1.
 - **Eroare la `pip install`** - verifica sa ai `(venv)` la inceputul
