@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 from datetime import datetime
 
@@ -412,12 +413,34 @@ def converteste_doc_in_docx(cale_doc):
 # Citire fisiere Word (.docx) - fiecare tabel din document e tratat ca o
 # "foaie" separata, exact ca la Excel
 # ---------------------------------------------------------------------------
-def citeste_tabele_docx(cale):
-    """Returneaza o lista de (nume_tabel, DataFrame) - cate unul pentru
-    fiecare tabel gasit in documentul Word. Primul rand al tabelului e
-    folosit ca antet de coloane."""
-    doc = DocxDocument(cale)
-    rezultat = []
+# ---------------------------------------------------------------------------
+# Citire fisiere Word (.docx) - atat tabelele (fiecare tratat ca o "foaie"
+# separata, exact ca la Excel), cat si paragrafele din afara tabelelor
+# (necesare pentru formatul "o excursie + participantii ei", care are
+# denumirea si perioada scrise ca text liber deasupra tabelului)
+# ---------------------------------------------------------------------------
+def citeste_docx_complet(cale):
+    """Returneaza (paragrafe, tabele). 'tabele' e o lista de
+    (nume_tabel, DataFrame), la fel ca inainte.
+
+    Incearca de 3 ori, cu o mica pauza intre incercari - pe un folder de
+    retea (NAS/share), uneori fisierul e "salvat" dar nu e inca vizibil
+    complet cand incepe citirea imediat dupa."""
+    ultima_eroare = None
+    for incercare in range(3):
+        if incercare > 0:
+            time.sleep(0.5)
+        try:
+            doc = DocxDocument(cale)
+            break
+        except Exception as exc:
+            ultima_eroare = exc
+    else:
+        raise ultima_eroare
+
+    paragrafe = [p.text for p in doc.paragraphs]
+
+    tabele = []
     for idx, tabel in enumerate(doc.tables, start=1):
         randuri = [[celula.text.strip() for celula in rand.cells] for rand in tabel.rows]
         randuri = [r for r in randuri if any(v for v in r)]  # sare peste randuri complet goale
@@ -425,13 +448,232 @@ def citeste_tabele_docx(cale):
             continue  # doar antet sau tabel gol, nimic de importat
         antet, *date = randuri
         df = pd.DataFrame(date, columns=antet).replace("", None)
-        rezultat.append((f"Tabel {idx}", df))
-    return rezultat
+        tabele.append((f"Tabel {idx}", df))
+
+    return paragrafe, tabele
 
 
 # ---------------------------------------------------------------------------
-# Punct de intrare
+# Format special 1: document cu "turisti premiati" - o coloana cu numele
+# turistului, o coloana EXACT numita "N" (total excursii cu agentia) si o
+# coloana care contine excursiile primite cadou (text liber, o linie per
+# excursie). NU creeaza turisti noi - e o corectie pentru cei deja existenti,
+# seteaza ajustare_excursii/ajustare_cadouri ca totalul din aplicatie sa
+# coincida cu totalul din document.
 # ---------------------------------------------------------------------------
+def detecteaza_tabel_corectii(df):
+    coloane = [c for c in df.columns if isinstance(c, str)]
+    coloane_norm = {normalizeaza(c): c for c in coloane}
+
+    # "N" trebuie sa se potriveasca EXACT, nu ca substring (altfel s-ar
+    # potrivi din greseala cu orice coloana care contine litera N, ex "Nume")
+    col_total = coloane_norm.get("N")
+    if not col_total:
+        return None
+
+    col_nume = gaseste_coloana(coloane, CANDIDATI_TURIST["nume"])
+    if not col_nume:
+        return None
+
+    col_cadou = None
+    for norm, orig in coloane_norm.items():
+        if "CADOU" in norm:
+            col_cadou = orig
+            break
+    if not col_cadou:
+        return None
+
+    return {"nume": col_nume, "total": col_total, "cadou": col_cadou}
+
+
+def importa_corectii(df, mapare, index_nume):
+    actualizati, negasiti = 0, []
+    for _, row in df.iterrows():
+        nume = text_curat(row.get(mapare["nume"]))
+        if not nume:
+            continue
+
+        candidati = index_nume.get(normalizeaza(nume), [])
+        turist = candidati[0] if candidati else None
+        if not turist:
+            negasiti.append(nume)
+            continue
+
+        total_text = text_curat(row.get(mapare["total"]))
+        total = int(total_text) if total_text and total_text.isdigit() else None
+
+        cadou_text = row.get(mapare["cadou"])
+        cadou_text = "" if pd.isna(cadou_text) else str(cadou_text).strip()
+        nr_cadou = len([linie for linie in cadou_text.split("\n") if linie.strip()]) if cadou_text else 0
+
+        # "N" (total) din document INCLUDE deja excursiile cadou - trebuie
+        # scazute de-acolo inainte sa calculam partea "platita", altfel
+        # cadourile s-ar numara de doua ori in total afisat de aplicatie.
+        deja_total = len(turist.inscrieri)
+        deja_cadou = len([i for i in turist.inscrieri if i.excursie_cadou])
+        deja_platite = deja_total - deja_cadou
+
+        if total is not None:
+            total_platite_document = total - nr_cadou
+            turist.ajustare_excursii = total_platite_document - deja_platite
+
+        turist.ajustare_cadouri = nr_cadou - deja_cadou
+
+        actualizati += 1
+
+    print(f"   corectii aplicate: {actualizati} turisti actualizati (numar total excursii + cadouri)")
+    if negasiti:
+        print(f"   ATENTIE: {len(negasiti)} nume din document nu s-au gasit in baza de date (turist inexistent - trebuie adaugat separat, apoi rulezi din nou acest fisier):")
+        for n in negasiti[:20]:
+            print(f"      - {n}")
+        if len(negasiti) > 20:
+            print(f"      ... si inca {len(negasiti) - 20}")
+
+
+# ---------------------------------------------------------------------------
+# Format special 2: document cu O SINGURA excursie si toti participantii ei
+# (denumirea + perioada scrise ca text liber deasupra tabelului, de forma
+# "<denumire> din perioada DD-DD.MM.YYYY" sau "<denumire> din perioada
+# DD.MM-DD.MM.YYYY"). Tabelul contine Nume, Telefon, E-mail, Achitat.
+# ---------------------------------------------------------------------------
+def extrage_nume_perioada_participanti(paragrafe):
+    """Cauta tiparul '<denumire> din perioada <date>' in paragrafele
+    dinaintea tabelului. Returneaza (nume, data_inceput, data_sfarsit) -
+    toate None daca tiparul nu a fost gasit (document de alt fel)."""
+    text_complet = "\n".join(p for p in paragrafe if p.strip())
+
+    # perioada in aceeasi luna: "29-30.07.2015"
+    m = re.search(
+        r"(.+?)\s+din\s+perioada\s+(\d{1,2})\s*-\s*(\d{1,2})\.(\d{1,2})\.(\d{4})",
+        text_complet, re.IGNORECASE,
+    )
+    if m:
+        nume, d1, d2, luna, an = m.groups()
+        try:
+            return (
+                nume.strip(" :-\n"),
+                datetime(int(an), int(luna), int(d1)).date(),
+                datetime(int(an), int(luna), int(d2)).date(),
+            )
+        except ValueError:
+            pass
+
+    # perioada intre luni diferite: "30.07-02.08.2015" sau "30.07.2015-02.08.2015"
+    m = re.search(
+        r"(.+?)\s+din\s+perioada\s+(\d{1,2})\.(\d{1,2})\.?(\d{4})?\s*-\s*(\d{1,2})\.(\d{1,2})\.(\d{4})",
+        text_complet, re.IGNORECASE,
+    )
+    if m:
+        nume, d1, m1, an1, d2, m2, an2 = m.groups()
+        an1 = an1 or an2
+        try:
+            return (
+                nume.strip(" :-\n"),
+                datetime(int(an1), int(m1), int(d1)).date(),
+                datetime(int(an2), int(m2), int(d2)).date(),
+            )
+        except ValueError:
+            pass
+
+    return None, None, None
+
+
+def detecteaza_tabel_participanti(df):
+    """Coloana 'Achitat' e semnul distinctiv al acestui format - fara ea,
+    nu incercam sa tratam tabelul ca fiind de acest tip (ca sa nu confundam
+    cu o lista generica de turisti, care are aceleasi coloane nume/telefon)."""
+    coloane = [c for c in df.columns if isinstance(c, str)]
+    col_achitat = gaseste_coloana(coloane, ["achitat", "suma achitata", "plata"])
+    col_nume = gaseste_coloana(coloane, CANDIDATI_TURIST["nume"])
+    if not col_achitat or not col_nume:
+        return None
+    return {
+        "nume": col_nume,
+        "telefon": gaseste_coloana(coloane, CANDIDATI_TURIST["telefon"]),
+        "email": gaseste_coloana(coloane, CANDIDATI_TURIST["email"]),
+        "achitat": col_achitat,
+    }
+
+
+def importa_excursie_cu_participanti(nume, data_inceput, data_sfarsit, df, mapare,
+                                      index_excursii, index_nume, index_cnp):
+    cheie_nume = normalizeaza(nume)
+    excursie = index_excursii.get((cheie_nume, data_inceput)) or index_excursii.get((cheie_nume, None))
+
+    if excursie is None:
+        excursie = Excursie(nume=nume, data_inceput=data_inceput, data_sfarsit=data_sfarsit)
+        db.session.add(excursie)
+        db.session.flush()
+        index_excursii[(cheie_nume, data_inceput)] = excursie
+        index_excursii.setdefault((cheie_nume, None), excursie)
+        info_data = f" ({data_inceput.strftime('%d.%m.%Y')})" if data_inceput else " (perioada nerecunoscuta - adaug-o manual din aplicatie)"
+        print(f"   Excursie noua: '{nume}'{info_data}")
+    else:
+        print(f"   Excursie deja existenta: '{excursie.nume}' - adaug participantii la ea")
+
+    adaugati, actualizati = 0, 0
+    for _, row in df.iterrows():
+        nume_turist = text_curat(row.get(mapare["nume"]))
+        if not nume_turist:
+            continue
+
+        telefon = text_curat(row.get(mapare["telefon"])) if mapare.get("telefon") else None
+        email_brut = text_curat(row.get(mapare["email"])) if mapare.get("email") else None
+        # unele fisiere au din greseala un al doilea numar de telefon in
+        # coloana de e-mail - il pastram, doar nu il punem in campul email
+        email = email_brut if email_brut and "@" in email_brut else None
+        telefon_secundar = email_brut if email_brut and "@" not in email_brut else None
+
+        cheie_t = normalizeaza(nume_turist)
+        candidati = index_nume.get(cheie_t, [])
+        turist = candidati[0] if candidati else None
+
+        if turist is None:
+            turist = Turist(nume=nume_turist, telefon=telefon, email=email)
+            if telefon_secundar:
+                turist.telefon = combina_valori(turist.telefon, telefon_secundar)
+            db.session.add(turist)
+            db.session.flush()
+            index_nume.setdefault(cheie_t, []).append(turist)
+            if turist.cnp:
+                index_cnp[turist.cnp] = turist
+        else:
+            turist.telefon = combina_valori(turist.telefon, telefon)
+            if telefon_secundar:
+                turist.telefon = combina_valori(turist.telefon, telefon_secundar)
+            turist.email = combina_valori(turist.email, email)
+            actualizati += 1
+
+        achitat_text = text_curat(row.get(mapare["achitat"]))
+        suma = None
+        if achitat_text:
+            try:
+                suma = float(achitat_text.replace(",", "."))
+            except ValueError:
+                suma = None
+
+        db.session.flush()
+        exista = Inscriere.query.filter_by(turist_id=turist.id, excursie_id=excursie.id).first()
+        if exista:
+            if suma is not None and not exista.suma_achitata:
+                exista.suma_achitata = suma
+            continue
+
+        db.session.add(Inscriere(turist=turist, excursie=excursie, suma_achitata=suma or 0))
+        adaugati += 1
+
+        # aceasta excursie e (aproape sigur) deja numarata in totalul din
+        # documentul de "turisti premiati" - ca sa nu se numere de doua
+        # ori, scadem 1 din corectia manuala de fiecare data cand o
+        # inscriere REALA (cu excursie si data concreta) o inlocuieste pe
+        # cea "generica", inregistrata doar ca numar in corectie.
+        if (turist.ajustare_excursii or 0) > 0:
+            turist.ajustare_excursii -= 1
+
+    db.session.flush()
+    print(f"   participanti: {adaugati} inscrieri noi, {actualizati} turisti completati (deja existenti)")
+
+
 def proceseaza_fisier(cale, index_nume, index_cnp, index_excursii, foi_inscrieri_amanate):
     print(f"\n=== {cale} ===")
     extensie = cale.lower().rsplit(".", 1)[-1] if "." in cale else ""
@@ -453,13 +695,38 @@ def proceseaza_fisier(cale, index_nume, index_cnp, index_excursii, foi_inscrieri
 
     if extensie == "docx":
         try:
-            tabele = citeste_tabele_docx(cale)
+            paragrafe, tabele = citeste_docx_complet(cale)
         except Exception as exc:
             print(f"   Nu am putut deschide fisierul Word: {exc}")
             return
         if not tabele:
             print("   Nu am gasit niciun tabel folosibil in acest document Word.")
             return
+
+        # 1) formatul "o excursie + participantii ei" (are neaparat coloana
+        # 'Achitat' SI un tipar '<nume> din perioada <date>' in text) - cel
+        # mai specific dintre toate, il verificam primul
+        nume_exc, data_i, data_f = extrage_nume_perioada_participanti(paragrafe)
+        if nume_exc:
+            for nume_tabel, df in tabele:
+                mapare_part = detecteaza_tabel_participanti(df)
+                if mapare_part:
+                    print(f"   Recunoscut ca fisier de participanti la o singura excursie.")
+                    importa_excursie_cu_participanti(
+                        nume_exc, data_i, data_f, df, mapare_part,
+                        index_excursii, index_nume, index_cnp,
+                    )
+                    return
+
+        # 2) formatul "turisti premiati" (corectii de numar excursii/cadouri)
+        for nume_tabel, df in tabele:
+            mapare_corectii = detecteaza_tabel_corectii(df)
+            if mapare_corectii:
+                print(f"   {nume_tabel} recunoscut ca lista de corectii (nume + total excursii + cadouri).")
+                importa_corectii(df, mapare_corectii, index_nume)
+                return
+
+        # 3) fallback: tabele generice de turisti/excursii, ca inainte
         for nume_tabel, df in tabele:
             tip, mapare = clasifica_foaie(df)
             if tip == "turisti":
@@ -506,13 +773,10 @@ def proceseaza_fisier(cale, index_nume, index_cnp, index_excursii, foi_inscrieri
             print(f"   Foaia '{foaie}': nu am recunoscut formatul, o ignor.")
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Utilizare: python import_excel.py fisier1.xls [fisier2.xlsx ...]")
-        sys.exit(1)
-
-    fisiere = sys.argv[1:]
-
+def importa_fisiere(cai_fisiere):
+    """Logica de import reutilizabila - apelata atat din linia de comanda
+    (main(), mai jos), cat si din aplicatia web (ruta /import), fara sa
+    duplice codul."""
     with app.app_context():
         asigura_schema_actualizata()
 
@@ -529,7 +793,7 @@ def main():
             index_excursii.setdefault((normalizeaza(e.nume), None), e)
 
         foi_inscrieri_amanate = []
-        for fisier in fisiere:
+        for fisier in cai_fisiere:
             proceseaza_fisier(fisier, index_nume, index_cnp, index_excursii, foi_inscrieri_amanate)
 
         db.session.commit()
@@ -541,6 +805,13 @@ def main():
         db.session.commit()
 
     print("\nImport finalizat.")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Utilizare: python import_excel.py fisier1.xls [fisier2.xlsx ...]")
+        sys.exit(1)
+    importa_fisiere(sys.argv[1:])
 
 
 if __name__ == "__main__":

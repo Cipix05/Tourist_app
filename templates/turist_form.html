@@ -77,6 +77,28 @@
         <label for="observatii">Observatii</label>
         <textarea id="observatii" name="observatii">{{ turist.observatii if turist else '' }}</textarea>
       </div>
+
+      <div class="field full" style="border-top:1px dashed var(--line); padding-top:14px; margin-top:4px;">
+        <label style="text-transform:none; font-size:13px; color:var(--brand-dark);">
+          Ajustare manuala numaratoare (optional)
+        </label>
+        <p class="subtitle" style="margin:2px 0 10px;">
+          Foloseste doar daca numaratoarea automata nu porneste de la valoarea reala
+          (ex: turist vechi care a facut excursii inainte de a fi introdus in aplicatie).
+          Valorile de aici se ADUNA peste ce numara aplicatia din inscrieri, iar
+          numararea continua normal de aici incolo la fiecare excursie noua.
+        </p>
+      </div>
+      <div class="field">
+        <label for="ajustare_excursii">Excursii platite in plus</label>
+        <input type="number" min="0" id="ajustare_excursii" name="ajustare_excursii"
+               value="{{ turist.ajustare_excursii if turist and turist.ajustare_excursii else 0 }}">
+      </div>
+      <div class="field">
+        <label for="ajustare_cadouri">Excursii cadou deja primite in plus</label>
+        <input type="number" min="0" id="ajustare_cadouri" name="ajustare_cadouri"
+               value="{{ turist.ajustare_cadouri if turist and turist.ajustare_cadouri else 0 }}">
+      </div>
     </div>
 
     <div style="margin-top:18px;">
@@ -85,3 +107,5 @@
     </div>
   </form>
 {% endblock %}
+
+

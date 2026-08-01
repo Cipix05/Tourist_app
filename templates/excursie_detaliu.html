@@ -12,6 +12,7 @@
     <div>
       <a class="btn secondary" href="{{ url_for('excursie_editeaza', excursie_id=excursie.id) }}">Editeaza</a>
       <a class="btn secondary" href="{{ url_for('excursie_autocar_docx', excursie_id=excursie.id) }}">⬇ Lista autocar (Word)</a>
+      <a class="btn secondary" href="{{ url_for('excursie_lista_contact_docx', excursie_id=excursie.id) }}">⬇ Lista contact (Word)</a>
       <form class="inline" method="post" action="{{ url_for('excursie_sterge', excursie_id=excursie.id) }}"
             onsubmit="return confirm('Sigur stergi aceasta excursie si toate inscrierile ei?');">
         <button class="btn danger" type="submit">Sterge</button>
@@ -312,3 +313,5 @@
     }
   </script>
 {% endblock %}
+
+

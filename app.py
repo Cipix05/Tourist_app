@@ -5,6 +5,7 @@ Ruleaza cu:  python app.py
 Apoi deschide in browser:  http://localhost:5000
 De pe alt PC din aceeasi retea:  http://<IP-ul-acestui-calculator>:5000
 """
+import contextlib
 import io
 import os
 import uuid
@@ -244,6 +245,16 @@ def clean(value):
     return value
 
 
+def _int_sigur(text):
+    text = (text or "").strip()
+    if not text:
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        return 0
+
+
 def _completeaza_turist(t, form):
     t.cnp = clean(form.get("cnp"))
     t.serie_ci = clean(form.get("serie_ci"))
@@ -255,6 +266,8 @@ def _completeaza_turist(t, form):
     t.telefon = clean(form.get("telefon"))
     t.email = clean(form.get("email"))
     t.observatii = clean(form.get("observatii"))
+    t.ajustare_excursii = _int_sigur(form.get("ajustare_excursii"))
+    t.ajustare_cadouri = _int_sigur(form.get("ajustare_cadouri"))
 
 
 # --------------------------------------------------------------------------
@@ -429,6 +442,73 @@ def genereaza_docx_autocar(excursie):
     return buffer
 
 
+@app.route("/excursii/<int:excursie_id>/lista-contact")
+def excursie_lista_contact_docx(excursie_id):
+    excursie = Excursie.query.get_or_404(excursie_id)
+    if not excursie.inscrieri:
+        flash("Nu exista turisti inscrisi la aceasta excursie inca.", "warning")
+        return redirect(url_for("excursie_detaliu", excursie_id=excursie.id))
+
+    buffer = genereaza_docx_contact(excursie)
+    nume_fisier = f"contact_{(excursie.cod or excursie.id)}.docx"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=nume_fisier,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+def genereaza_docx_contact(excursie):
+    """Export separat de lista de autocar - centrat pe date de contact
+    (telefon + email), nu pe semnaturi."""
+    doc = Document()
+    for sectiune in doc.sections:
+        sectiune.left_margin = Cm(1.3)
+        sectiune.right_margin = Cm(1.3)
+        sectiune.top_margin = Cm(1.5)
+        sectiune.bottom_margin = Cm(1.5)
+
+    doc.add_heading(f"Lista contact - {excursie.nume}", level=1)
+
+    perioada = ""
+    if excursie.data_inceput:
+        perioada = excursie.data_inceput.strftime("%d.%m.%Y")
+        if excursie.data_sfarsit and excursie.data_sfarsit != excursie.data_inceput:
+            perioada += " - " + excursie.data_sfarsit.strftime("%d.%m.%Y")
+    sub = doc.add_paragraph()
+    sub.add_run(f"Perioada: {perioada or '-'}    |    Total turisti: {excursie.numar_participanti}").italic = True
+    doc.add_paragraph()
+
+    latimi_cm = [1.0, 6.0, 3.5, 6.0]
+    antete = ["Nr.", "Nume turist", "Telefon", "E-mail"]
+
+    tabel = doc.add_table(rows=1, cols=len(antete))
+    tabel.style = "Table Grid"
+    _seteaza_latimi_coloane(tabel, latimi_cm)
+
+    antet_celule = tabel.rows[0].cells
+    for cell, text_antet in zip(antet_celule, antete):
+        cell.text = text_antet
+        for p in cell.paragraphs:
+            for r in p.runs:
+                r.bold = True
+
+    inscrieri_sortate = sorted(excursie.inscrieri, key=lambda i: i.turist.nume)
+    for idx, inscriere in enumerate(inscrieri_sortate, start=1):
+        rand = tabel.add_row().cells
+        rand[0].text = str(idx)
+        rand[1].text = inscriere.turist.nume
+        rand[2].text = inscriere.turist.telefon or ""
+        rand[3].text = inscriere.turist.email or ""
+    _seteaza_latimi_coloane(tabel, latimi_cm)
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 def _seteaza_latimi_coloane(tabel, latimi_cm):
     """
     python-docx / Word ignora frecvent table.columns[i].width daca tabelul
@@ -555,6 +635,89 @@ def cost_sterge(cost_id):
     db.session.delete(cost)
     db.session.commit()
     return redirect(url_for("excursie_detaliu", excursie_id=excursie_id) + "#costuri")
+
+
+# --------------------------------------------------------------------------
+# Import fisiere direct din aplicatie (Excel/Word), fara linia de comanda
+# --------------------------------------------------------------------------
+EXTENSII_PERMISE_IMPORT = {"xls", "xlsx", "doc", "docx"}
+
+
+@app.route("/import", methods=["GET", "POST"])
+def import_fisiere():
+    if request.method == "POST":
+        fisiere_incarcate = [f for f in request.files.getlist("fisiere") if f and f.filename]
+
+        if not fisiere_incarcate:
+            flash("Nu ai selectat niciun fisier.", "warning")
+            return redirect(url_for("import_fisiere"))
+
+        cai_temporare = []
+        respinse = []
+        avertismente = []
+        for f in fisiere_incarcate:
+            ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+            if ext not in EXTENSII_PERMISE_IMPORT:
+                respinse.append(f.filename)
+                continue
+            nume_sigur = secure_filename(f.filename)
+            cale = os.path.join(UPLOAD_DIR, f"import_tmp_{uuid.uuid4().hex}_{nume_sigur}")
+            f.save(cale)
+
+            # verificare de siguranta: uneori, mai ales pe un folder de retea,
+            # scrierea fisierului nu se termina instant - verificam ca a ajuns
+            # ceva pe disc inainte sa incercam sa-l citim
+            marime = os.path.getsize(cale) if os.path.exists(cale) else 0
+            if marime == 0:
+                avertismente.append(f"'{f.filename}' s-a salvat gol (0 KB) - incearca din nou sau verifica fisierul original.")
+                continue
+
+            cai_temporare.append(cale)
+
+        # importul se face aici, in acelasi proces - fara terminal, fara
+        # VS Code. Import "lazy" (in interiorul functiei) ca sa evitam o
+        # referinta circulara intre app.py si import_excel.py (acesta din
+        # urma face "from app import app" la randul lui).
+        import import_excel
+
+        jurnal = io.StringIO()
+        esuate = []
+        try:
+            with contextlib.redirect_stdout(jurnal):
+                import_excel.importa_fisiere(cai_temporare)
+        except Exception as exc:
+            jurnal.write(f"\nEROARE neasteptata: {exc}\n")
+        finally:
+            for cale in cai_temporare:
+                # daca fisierul respectiv a aparut ca "n-am putut deschide"
+                # in jurnal, il pastram pe disc (nu il stergem), ca sa poata
+                # fi verificat manual - restul, care s-au procesat cu succes,
+                # se sterg normal
+                if "Nu am putut deschide" in jurnal.getvalue() and os.path.basename(cale) in jurnal.getvalue():
+                    esuate.append(cale)
+                    continue
+                try:
+                    os.remove(cale)
+                except OSError:
+                    pass
+
+        raport = jurnal.getvalue()
+        if avertismente:
+            raport += "\n" + "\n".join(avertismente)
+        if respinse:
+            raport += "\nFisiere ignorate (format nepermis): " + ", ".join(respinse)
+        if esuate:
+            raport += (
+                "\n\nUrmatoarele fisiere NU au putut fi citite si au fost PASTRATE"
+                " (nu sterse) pentru verificare manuala:\n"
+            )
+            for cale in esuate:
+                marime = os.path.getsize(cale) if os.path.exists(cale) else 0
+                raport += f"   {cale}  ({marime} octeti)\n"
+
+        return render_template("import.html", raport=raport)
+
+    return render_template("import.html", raport=None)
 
 
 if __name__ == "__main__":

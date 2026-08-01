@@ -37,6 +37,14 @@ class Turist(db.Model):
     # exact ce mai trebuie oferit
     premii_acordate = db.Column(db.Integer, default=0)
 
+    # ajustari manuale (corectii introduse de operator cand numararea
+    # automata nu porneste de la valoarea reala - ex: turist vechi care a
+    # facut excursii inainte de a fi introdus in aplicatie). Aceste valori
+    # se ADUNA peste ce numara automat aplicatia din inscrieri, iar
+    # numararea continua normal de aici incolo la fiecare excursie noua.
+    ajustare_excursii = db.Column(db.Integer, default=0)   # excursii platite in plus
+    ajustare_cadouri = db.Column(db.Integer, default=0)    # excursii cadou deja primite in plus
+
     # istoric simplu de modificari (schimbare adresa/CI/nume) - text liber,
     # fiecare linie noua se adauga la cele vechi, cu data
     istoric_modificari = db.Column(db.Text)
@@ -51,12 +59,17 @@ class Turist(db.Model):
 
     @property
     def numar_excursii(self):
-        return len(self.inscrieri)
+        """Total excursii efectuate (platite + primite cadou), incluzand
+        ajustarile manuale."""
+        return len(self.inscrieri) + (self.ajustare_excursii or 0) + (self.ajustare_cadouri or 0)
 
     @property
     def numar_excursii_platite(self):
-        """Excursiile care CONTEAZA pentru premiu - fara cele deja primite cadou."""
-        return len([i for i in self.inscrieri if not i.excursie_cadou])
+        """Excursiile care CONTEAZA pentru premiu - fara cele deja primite cadou.
+        Se adauga ajustarea manuala (excursii facute inainte de introducerea
+        in aplicatie), ca numararea sa porneasca de la valoarea corecta."""
+        automat = len([i for i in self.inscrieri if not i.excursie_cadou])
+        return automat + (self.ajustare_excursii or 0)
 
     @property
     def numar_premii(self):
@@ -69,8 +82,13 @@ class Turist(db.Model):
     def numar_cadouri_acordate(self):
         """Cate excursii-cadou au fost deja bifate la persoana asta, plus
         premiile marcate manual prin sistemul vechi (pastrat pentru
-        compatibilitate cu ce era deja marcat inainte de aceasta versiune)."""
-        return len([i for i in self.inscrieri if i.excursie_cadou]) + (self.premii_acordate or 0)
+        compatibilitate cu ce era deja marcat inainte de aceasta versiune),
+        plus ajustarea manuala de cadouri deja primite."""
+        return (
+            len([i for i in self.inscrieri if i.excursie_cadou])
+            + (self.premii_acordate or 0)
+            + (self.ajustare_cadouri or 0)
+        )
 
     @property
     def premii_de_acordat(self):
@@ -176,3 +194,5 @@ class CostExcursie(db.Model):
     notite = db.Column(db.Text)
 
     excursie = db.relationship("Excursie", backref=db.backref("costuri", cascade="all, delete-orphan"))
+
+
